@@ -1,7 +1,3 @@
-//! This example test the RP Pico on board LED.
-//!
-//! It does not work with the RP Pico W board. See wifi_blinky.rs.
-
 #![no_std]
 #![no_main]
 
@@ -10,20 +6,29 @@ use embassy_executor::Spawner;
 use embassy_rp::gpio;
 use embassy_time::Timer;
 use gpio::{Level, Output};
-use {defmt_rtt as _, panic_probe as _};
+use {defmt_bbq as _, panic_probe as _};
+
+// Add USB serial support !
+mod usb;
 
 #[embassy_executor::main]
-async fn main(_spawner: Spawner) {
+async fn main(spawner: Spawner) {
+    // Log queue
+    let consumer = defmt_bbq::init().unwrap();
+
     let p = embassy_rp::init(Default::default());
+
+    usb::setup(p.USB, spawner, consumer).await;
+
     let mut led = Output::new(p.PIN_13, Level::Low);
 
     loop {
-        // info!("led on!");
+        info!("led on!");
         led.set_high();
-        // Timer::after_secs(2).await;
+        Timer::after_secs(2).await;
 
-        // info!("led off!");
-        // led.set_low();
-        // Timer::after_secs(1).await;
+        info!("led off!");
+        led.set_low();
+        Timer::after_secs(1).await;
     }
 }
