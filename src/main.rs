@@ -26,5 +26,10 @@ async fn main(spawner: Spawner) {
 
     // Optional setup
     #[cfg(feature = "blinky")]
-    blinky::blink(spawner, board, blinky::BlinkConfig::new(500, 3000)).unwrap();
+    spawner
+        .spawn(blinky::blink(
+            board.heartbeat_led,
+            blinky::BlinkConfig::new(500, 3000),
+        ))
+        .expect("failed to spawn LED heartbeat task");
 }

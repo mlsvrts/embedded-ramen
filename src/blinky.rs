@@ -1,8 +1,5 @@
 use crate::platform::gpio::{AnyPin, Output};
-use crate::platform::{Board, Platform};
-use core::result::Result;
 use defmt::*;
-use embassy_executor::{SpawnError, Spawner};
 use embassy_time::Timer;
 
 pub struct BlinkConfig {
@@ -16,14 +13,8 @@ impl BlinkConfig {
     }
 }
 
-pub fn blink(spawner: Spawner, board: Board, cfg: BlinkConfig) -> Result<(), SpawnError> {
-    let led = board.blink_led();
-
-    spawner.spawn(blink_task(led, cfg))
-}
-
 #[embassy_executor::task]
-async fn blink_task(mut led: Output<'static, AnyPin>, cfg: BlinkConfig) {
+pub async fn blink(mut led: Output<'static, AnyPin>, cfg: BlinkConfig) {
     info!("Starting LED heartbeat...");
     loop {
         led.set_high();
