@@ -1,29 +1,34 @@
-use defmt::{info, panic, unwrap};
-use defmt_bbq::DefmtConsumer;
-use embassy_executor::Spawner;
-use embassy_rp::bind_interrupts;
-use embassy_rp::peripherals::USB;
-use embassy_rp::usb::{Driver, InterruptHandler};
-use embassy_time::Timer;
+// Required for USB setup
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
-use embassy_usb::driver::EndpointError;
 use embassy_usb::UsbDevice;
 use static_cell::StaticCell;
 
+// Spawning
+use embassy_executor::{SpawnError, Spawner};
+
+// Logging
+use defmt::info;
+
+// Extra
+use embassy_time::Timer;
+
+use crate::platform::BoardInfo;
+use crate::platform::{bind_interrupts, Driver, InterruptHandler, Usb};
+
 bind_interrupts!(struct Irqs {
-    USBCTRL_IRQ => InterruptHandler<USB>;
+    USBCTRL_IRQ => InterruptHandler<Usb>;
 });
 
-pub async fn setup(usb: USB, spawner: Spawner, consumer: DefmtConsumer) {
+pub async fn init(usb: Usb, info: &BoardInfo, spawner: Spawner) -> Result<(), SpawnError> {
     // Create the driver, from the HAL.
     let driver = Driver::new(usb, Irqs);
 
     // Create embassy-usb Config
     let config = {
         let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
-        config.manufacturer = Some("MLSVRTS");
-        config.product = Some("RP2040");
-        config.serial_number = Some("VRTS-2040-1");
+        config.manufacturer = Some(info.manufacturer);
+        config.product = Some(info.name);
+        config.serial_number = Some(info.serial);
         config.max_power = 100;
         config.max_packet_size_0 = 64;
 
@@ -65,77 +70,28 @@ pub async fn setup(usb: USB, spawner: Spawner, consumer: DefmtConsumer) {
     let usb = builder.build();
 
     // Run the USB device.
-    unwrap!(spawner.spawn(usb_task(usb)));
+    spawner.spawn(usb_task(usb))?;
 
-    unwrap!(spawner.spawn(echo_task(class, consumer)));
+    spawner.spawn(logger(class))
 }
 
 #[embassy_executor::task]
-async fn echo_task(
-    mut class: CdcAcmClass<'static, Driver<'static, USB>>,
-    mut consumer: DefmtConsumer,
-) {
+async fn logger(mut class: CdcAcmClass<'static, Driver<'static, Usb>>) {
     // Do stuff with the class!
+    class.wait_connection().await;
+    info!("Connected");
     loop {
-        class.wait_connection().await;
-        info!("Connected");
+        Timer::after_secs(3).await;
+        let res = class.write_packet(b"Hello, logger!\n").await;
 
-        // let mut data = [0u8; 64];
-        // let map = [
-        //     b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9', b'A', b'B', b'C', b'D', b'E',
-        //     b'F',
-        // ];
-        while let Ok(grant) = consumer.read() {
-            // do something with `bytes`, like send
-            // it over a serial port..
-            Timer::after_secs(1).await;
-
-            let res = class.write_packet(b"alive\n").await;
-            // // let res = class.write_packet(&grant).await;
-            // let rlen = core::cmp::min(16, grant.len());
-
-            // if rlen == 0 {
-            //     continue;
-            // }
-
-            // for i in 0..rlen {
-            //     let upper = (grant[i] & 0xF0) >> 4;
-            //     let lower = grant[i] & 0x0F;
-
-            //     data[i * 2] = map[upper as usize];
-            //     data[(i * 2) + 1] = map[lower as usize];
-            // }
-
-            // // let res = class.write_packet(&grant[..rlen]).await;
-            // let res = class.write_packet(&data[..(rlen * 2)]).await;
-
-            // // Then when done, make sure you release the grant
-            // // to free the space for future logging.
-            // grant.release(rlen);
-
-            if res.is_err() {
-                break;
-            }
+        if res.is_err() {
+            break;
         }
-        info!("Disconnected");
     }
+    info!("Disconnected");
 }
-
-type MyUsbDriver = Driver<'static, USB>;
-type MyUsbDevice = UsbDevice<'static, MyUsbDriver>;
 
 #[embassy_executor::task]
-async fn usb_task(mut usb: MyUsbDevice) -> ! {
+async fn usb_task(mut usb: UsbDevice<'static, Driver<'static, Usb>>) -> ! {
     usb.run().await
-}
-
-struct Disconnected {}
-
-impl From<EndpointError> for Disconnected {
-    fn from(val: EndpointError) -> Self {
-        match val {
-            EndpointError::BufferOverflow => panic!("Buffer overflow"),
-            EndpointError::Disabled => Disconnected {},
-        }
-    }
 }

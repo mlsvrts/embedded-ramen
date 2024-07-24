@@ -48,13 +48,13 @@ defmt-rtt = { version = "0.4", optional = true }
 
 
 [features]
-default = ["usb-cdc", "log-rtt", "blinky", "rp2040"]
+default = ["usb", "log-rtt", "blinky", "rp2040"]
 
 # Logging
 log-rtt = ["dep:defmt-rtt"]
 
 # USB
-usb-cdc = ["dep:embassy-usb"]
+usb = ["dep:embassy-usb"]
 
 # Status LED
 blinky = []

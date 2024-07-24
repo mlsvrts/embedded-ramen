@@ -8,8 +8,8 @@ use {defmt_rtt as _, panic_probe as _};
 mod platform;
 
 // USB Emulated Serial Support (CDC-ACM)
-#[cfg(usb_cdc)]
-mod usb_cdc;
+#[cfg(feature = "usb")]
+mod usb;
 
 // Status LED
 #[cfg(feature = "blinky")]
@@ -32,4 +32,9 @@ async fn main(spawner: Spawner) {
             blinky::BlinkConfig::new(500, 3000),
         ))
         .expect("failed to spawn LED heartbeat task");
+
+    #[cfg(feature = "usb")]
+    usb::init(board.usb_terminal, &board.info, spawner)
+        .await
+        .expect("failed to initialize USB")
 }
