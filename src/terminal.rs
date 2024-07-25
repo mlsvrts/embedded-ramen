@@ -59,7 +59,7 @@ impl Terminal {
                 length: grant.len(),
             };
 
-            if self.send(header, &grant, false).await.is_ok() {
+            if self.send(header, &grant).await.is_ok() {
                 grant.release(len);
             }
 
@@ -71,13 +71,13 @@ impl Terminal {
                 length: msg.len(),
             };
 
-            self.send(header, msg, true).await.ok();
+            self.send(header, msg).await.ok();
         }
 
         result
     }
 
-    pub async fn send(&mut self, header: MessageHeader, data: &[u8], raw: bool) -> Result<(), ()> {
+    pub async fn send(&mut self, header: MessageHeader, data: &[u8]) -> Result<(), ()> {
         // TODO: Static cell?
         // Build out the fixed-length message header bytes
         let mut header_bytes: [u8; 16] = [0u8; 16];
@@ -97,42 +97,9 @@ impl Terminal {
 
         // Write the data
         let max_size: usize = self.class.max_packet_size() as usize;
-        if raw {
-            // Send the raw data over the wire
-            for chunk in data.chunks(max_size) {
-                if let Err(e) = self.class.write_packet(chunk).await {
-                    error!("failed to write usb packet data: {}", e);
-                    return Err(());
-                }
-            }
-        } else {
-            // Encode the data a ascii characters
-            //
-            // This is pretty cursed, but results in 'human'
-            // readable serial output
-            let mut offset = 0;
-            let mut data_bytes: [u8; 64] = [0u8; 64];
-
-            for byte in data {
-                let mut buffer = itoa::Buffer::new();
-                let strver = buffer.format(*byte).as_bytes();
-
-                if strver.len() + offset > data_bytes.len() {
-                    // Send some data
-                    if let Err(e) = self.class.write_packet(&data_bytes[..offset]).await {
-                        error!("failed to write usb packet data: {}", e);
-                        return Err(());
-                    }
-
-                    offset = 0;
-                } else {
-                    data_bytes[offset..offset + strver.len()].copy_from_slice(strver);
-                    offset += strver.len();
-                }
-            }
-
-            // Final send
-            if let Err(e) = self.class.write_packet(&data_bytes[..offset]).await {
+        // Send the raw data over the wire
+        for chunk in data.chunks(max_size) {
+            if let Err(e) = self.class.write_packet(chunk).await {
                 error!("failed to write usb packet data: {}", e);
                 return Err(());
             }
