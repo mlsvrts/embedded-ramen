@@ -6,12 +6,6 @@ use static_cell::StaticCell;
 // Spawning
 use embassy_executor::{SpawnError, Spawner};
 
-// Logging
-use defmt::info;
-
-// Extra
-use embassy_time::Timer;
-
 use crate::platform::BoardInfo;
 use crate::platform::{bind_interrupts, Driver, InterruptHandler, Usb};
 
@@ -19,7 +13,10 @@ bind_interrupts!(struct Irqs {
     USBCTRL_IRQ => InterruptHandler<Usb>;
 });
 
-pub async fn init(usb: Usb, info: &BoardInfo, spawner: Spawner) -> Result<(), SpawnError> {
+// The CDC ACM Channel
+pub type CdcChannel = CdcAcmClass<'static, Driver<'static, Usb>>;
+
+pub async fn init(usb: Usb, info: &BoardInfo, spawner: Spawner) -> Result<CdcChannel, SpawnError> {
     // Create the driver, from the HAL.
     let driver = Driver::new(usb, Irqs);
 
@@ -72,25 +69,10 @@ pub async fn init(usb: Usb, info: &BoardInfo, spawner: Spawner) -> Result<(), Sp
     // Run the USB device.
     spawner.spawn(usb_task(usb))?;
 
-    spawner.spawn(logger(class))
+    Ok(class)
 }
 
-#[embassy_executor::task]
-async fn logger(mut class: CdcAcmClass<'static, Driver<'static, Usb>>) {
-    // Do stuff with the class!
-    class.wait_connection().await;
-    info!("Connected");
-    loop {
-        Timer::after_secs(3).await;
-        let res = class.write_packet(b"Hello, logger!\n").await;
-
-        if res.is_err() {
-            break;
-        }
-    }
-    info!("Disconnected");
-}
-
+/// Regularly runs the core usb housekeeping task
 #[embassy_executor::task]
 async fn usb_task(mut usb: UsbDevice<'static, Driver<'static, Usb>>) -> ! {
     usb.run().await

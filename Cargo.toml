@@ -42,16 +42,22 @@ panic-probe = { version = "0.3", features = ["print-defmt"] } # Die better
 portable-atomic = { version = "1.7", features = [
     "critical-section",
 ] } # Atomic integers, CAS
+itoa = "1.0.11" # integer to &str, stack-y
 
-# Logging
+# Logging - rtt
 defmt-rtt = { version = "0.4", optional = true }
+
+# Logging - undefmt
+defmt-bbq = { version = "0.1.0", optional = true }
+bbqueue = { optional = true }
 
 
 [features]
-default = ["usb", "log-rtt", "blinky", "rp2040"]
+default = ["usb", "defmt-terminal", "blinky", "rp2040"]
 
 # Logging
-log-rtt = ["dep:defmt-rtt"]
+defmt-rtt = ["dep:defmt-rtt"]
+defmt-terminal = ["dep:defmt-bbq", "dep:bbqueue"]
 
 # USB
 usb = ["dep:embassy-usb"]
@@ -60,7 +66,7 @@ usb = ["dep:embassy-usb"]
 blinky = []
 
 # Boards
-rp2040 = ["dep:embassy-rp", "arch-cortex-m"]
+rp2040 = ["dep:embassy-rp", "arch-cortex-m", "bbqueue/thumbv6"]
 arch-cortex-m = [
     "dep:cortex-m",
     "dep:cortex-m-rt",

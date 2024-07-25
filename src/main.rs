@@ -2,10 +2,19 @@
 #![no_main]
 
 use embassy_executor::Spawner;
-use {defmt_rtt as _, panic_probe as _};
+use panic_probe as _;
+
+#[cfg(feature = "defmt-rtt")]
+use defmt_rtt as _;
+
+#[cfg(feature = "defmt-terminal")]
+use defmt_bbq as _;
 
 // Platform peripheral setup
 mod platform;
+
+/// Terminal control interface
+mod terminal;
 
 // USB Emulated Serial Support (CDC-ACM)
 #[cfg(feature = "usb")]
@@ -18,13 +27,12 @@ mod blinky;
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     // Log queue
-    // let consumer = defmt_bbq::init().unwrap();
-    // let p = embassy_rp::init(Default::default());
-    // usb::setup(p.USB, spawner, consumer).await;
+    #[cfg(feature = "defmt-terminal")]
+    let defmt_consumer = defmt_bbq::init().unwrap();
 
     let board = platform::init();
 
-    // Optional setup
+    // Optional (start heartbeat LED)
     #[cfg(feature = "blinky")]
     spawner
         .spawn(blinky::blink(
@@ -33,8 +41,22 @@ async fn main(spawner: Spawner) {
         ))
         .expect("failed to spawn LED heartbeat task");
 
+    // Optional (use USB as terminal)
     #[cfg(feature = "usb")]
-    usb::init(board.usb_terminal, &board.info, spawner)
+    let cdc = usb::init(board.usb_terminal, &board.info, spawner)
         .await
-        .expect("failed to initialize USB")
+        .expect("failed to initialize USB");
+
+    // Setup the terminal
+    let term = terminal::Terminal {
+        #[cfg(feature = "defmt-terminal")]
+        defmt: defmt_consumer,
+        #[cfg(feature = "usb")]
+        class: cdc,
+        is_connected: false,
+    };
+
+    spawner
+        .spawn(terminal::task(term))
+        .expect("failed to initialize terminal task");
 }
